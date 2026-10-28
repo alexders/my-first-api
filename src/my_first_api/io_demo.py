@@ -84,3 +84,162 @@ with open("test_json.json", "r", encoding="utf-8") as f:
     data_loaded = json.load(f)  # 读取json文件4
 print("读取的json数据：", data_loaded)
 print("读取的json数据类型：", type(data_loaded))  # <class 'dict'>
+
+if True:
+   print("这是一个测试")
+
+try:
+    a = 10 / 0
+except ZeroDivisionError:
+    print("错误：不能除以0！")
+
+
+# nonlocal 嵌套函数，修改外层函数变量
+def outer():
+    num = 10
+    def inner():
+        nonlocal num
+        num = 20
+    inner()
+    print(num)
+outer()
+
+y = 100
+def test_local():
+    y = 200
+    print("局部y：", y)
+test_local()
+print("全局y：", y)
+print()
+
+print("===== 9.3 初探类 =====")
+class Dog:
+    # 类变量：所有实例共享
+    species = "狗"
+
+    def __init__(self, name):
+        # 实例变量：每个实例独立
+        self.name = name
+
+    def bark(self):
+        print(self.name, "汪汪")
+
+# 实例化
+d1 = Dog("旺财")
+d2 = Dog("大黄")
+d1.bark()
+d2.bark()
+print(d1.name, d2.name)
+print(Dog.species, d1.species)
+
+# ===================== 9.4 补充知识点：__class__、动态添加属性 =====================
+print("===== 9.4 补充说明 =====")
+print(d1.__class__)
+
+# //d1.age = 3  # 动态添加属性,编译器会提醒,但是不会运行失败
+# print(d1.age)
+
+# ===================== 9.5 继承、isinstance、issubclass、多重继承、MRO =====================
+print("===== 9.5 继承 =====")
+class Animal:
+    def say(self):
+        print("动物叫")
+
+class Cat(Animal):
+    def say(self):
+        print("喵喵")
+
+c = Cat()
+c.say() # 重写方法
+
+# 调用父类原始写法
+class Cat2(Animal):
+    def say(self):
+        Animal.say(self)
+        print("喵喵喵")
+c2 = Cat2()
+c2.say()
+
+# 判断类型
+print(isinstance(c, Cat))
+print(isinstance(c, Animal))
+print(issubclass(Cat, Animal))
+
+# 多重继承
+class A:
+    def hello(self):
+        print("A")
+class B:
+    def hello(self):
+        print("B")
+class C(A,B):
+    pass
+cc = C()
+cc.hello() # 看MRO顺序，优先A
+print(C.__mro__) # 打印MRO查找顺序
+print()
+
+print("===== 9.7 杂项 =====")
+from dataclasses import dataclass
+@dataclass
+class Point:
+    x: int
+    y: int
+p = Point(10,20)
+print(p)
+
+m = d1.bark
+print(m.__self__)
+print(m.__func__)
+print()
+
+class Count:
+    def __init__(self, end):
+        self.n = 0
+        self.end = end
+    def __iter__(self):
+        return self
+    def __next__(self):
+        if self.n < self.end:
+            val = self.n
+            self.n += 1
+            return val
+        else:
+            raise StopIteration
+
+c = Count(3)
+it = iter(c)
+print(next(it)) # 0
+print(next(it)) # 1
+print(next(it)) # 2
+# ===================== 9.9 生成器 yield =====================
+print("===== 9.9 生成器 =====")
+def gen(end):
+    n = 0
+    while n < end:
+        yield n
+        n += 1
+
+g = gen(3)
+print(next(g))
+print(next(g))
+print(next(g))
+
+for x in gen(3):
+    print("for循环：", x)
+print()
+
+# ===================== 9.10 生成器表达式 (expr for ...) =====================
+print("===== 9.10 生成器表达式 =====")
+lst_comp = [x*x for x in range(5)] # 列表推导，全部放内存
+gen_comp = (x*x for x in range(5)) # 生成器表达式，惰性
+print(lst_comp)
+print(sum(x for x in range(10))) # 作为函数参数可以省略括号 0 1 2 3 4 5 6 7 8 9 
+
+import glob
+print(glob.glob("*.py")) # 当前目录下所有py文件
+
+
+# 文件 demo.py
+import sys
+print(sys.argv)
