@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import os
+from pydantic import BaseModel
 print(f"当前工作目录: {os.getcwd()}")
 app = FastAPI()
 
@@ -49,3 +50,14 @@ async def chat_stream():
             "X-Accel-Buffering": "no",
         },
     )
+class Item(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+    tax: float | None = None
+
+
+@app.post("/items/")
+async def create_item(item: Item):
+   dictlist= item.model_dump()
+   return str(dictlist)
