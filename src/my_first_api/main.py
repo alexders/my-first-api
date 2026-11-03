@@ -3,7 +3,8 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-
+import os
+print(f"当前工作目录: {os.getcwd()}")
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
