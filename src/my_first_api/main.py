@@ -1,6 +1,6 @@
 import asyncio
-
-from fastapi import FastAPI
+from typing import Annotated
+from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import os
@@ -57,7 +57,19 @@ class Item(BaseModel):
     tax: float | None = None
 
 
-@app.post("/items/")
-async def create_item(item: Item):
-   dictlist= item.model_dump()
-   return str(dictlist)
+# @app.post("/items/")
+# async def create_item(item: Item):
+#    dictlist= item.model_dump()
+#    return str(dictlist)
+
+# @app.get("/items/")
+# async def read_items(q: Annotated[str, Query(min_length=3)] = "fixedquery") :
+#     results = {"items": [{"item_id": "Foo"}, {"item_id": "Bar"}],'q': '123'}
+#     if q:
+#         results.update({"q": q})
+#     return results
+
+@app.get("/items/")
+async def read_items(q: Annotated[list[str] | None, Query()] = None):
+    query_items = {"q": q}
+    return query_items
