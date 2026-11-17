@@ -5,6 +5,8 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from pydantic import BaseModel
+from starlette import status
+
 print(f"当前工作目录: {os.getcwd()}")
 app = FastAPI()
 
@@ -73,3 +75,16 @@ class Item(BaseModel):
 async def read_items(q: Annotated[list[str] | None, Query()] = None):
     query_items = {"q": q}
     return query_items
+
+
+class Items(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+    tax: float | None = None
+    tags: set[str] = set()
+
+
+@app.post("/items/", status_code=status.HTTP_201_CREATED)
+async def create_item(item: Items) -> Items:
+    return item
