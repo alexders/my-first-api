@@ -1,17 +1,37 @@
 import asyncio
 import os
-from typing import Annotated
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Query, responses
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette import status
-
+from .config import get_settings
 print(f"当前工作目录: {os.getcwd()}")
-app = FastAPI()
-
+@asynccontextmanager
+async def lifespan(app):
+    print("应用跑起来了...")
+    yield
+    print("应用要关闭了...")
+app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+
+
+@app.exception_handler(RuntimeError)
+async def runtime_error_handler(request: Request, exc: RuntimeError):
+    return JSONResponse(
+        status_code=500,
+        content={"code": "500", "message": str(exc), "path": request.url.path},
+    )
 
 
 @app.get("/getmessage")
@@ -55,8 +75,6 @@ async def chat_stream():
     )
 
 
-
-
 class Customer(BaseModel):
     name: str
     description: str | None = None
@@ -69,12 +87,14 @@ class Customer(BaseModel):
 async def create_customer(customer: Customer) -> Customer:
     return customer
 
+
 class Item(BaseModel):
     name: str
     description: str | None = None
     price: float
     tax: float | None = None
-    cost:float
+    cost: float
+
 
 class ItemPublic(BaseModel):
     name: str
@@ -82,8 +102,31 @@ class ItemPublic(BaseModel):
     price: float
 
 
-
-@app.post("/items/",response_model=ItemPublic)
-async def get_public_item(item:Item):
+@app.post("/items/", response_model=ItemPublic)
+async def get_public_item(item: Item):
     return item
 
+
+# 假的存储层：先用字典模拟数据库，C 阶段会换成 SQLAlchemy
+FAKE_ITEMS: dict[int, Item] = {
+    1: Item(
+        name="笔记本", description="13 寸轻薄本", price=5999.0, tax=0.13, cost=4800.0
+    ),
+    2: Item(name="鼠标", description="无线静音", price=129.0, tax=0.13, cost=60.0),
+}
+
+
+@app.get("/items/{item_id}", response_model=ItemPublic)
+async def get_item_id(item_id: int):
+    if item_id not in FAKE_ITEMS:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return FAKE_ITEMS[item_id]
+
+@app.get("/config")
+async def get_config():
+    config = get_settings()
+    return {
+        "app_name": config.app_name,
+        "debug": config.debug,
+        "database_url": config.database_url,
+    }
