@@ -24,7 +24,9 @@ print()
 
 print("=== 3. 怎么一眼判断谁是协程函数 ===")
 print(f"asyncio.iscoroutinefunction(normal)   = {asyncio.iscoroutinefunction(normal)}")
-print(f"asyncio.iscoroutinefunction(async_fn) = {asyncio.iscoroutinefunction(async_fn)}")
+print(
+    f"asyncio.iscoroutinefunction(async_fn) = {asyncio.iscoroutinefunction(async_fn)}"
+)
 print()
 
 print("=== 4. async_fn 要拿真结果，必须 await ===")

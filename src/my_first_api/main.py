@@ -1,9 +1,10 @@
 import asyncio
+import os
 from typing import Annotated
-from fastapi import FastAPI, Query
+
+from fastapi import FastAPI, Query, responses
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-import os
 from pydantic import BaseModel
 from starlette import status
 
@@ -52,32 +53,11 @@ async def chat_stream():
             "X-Accel-Buffering": "no",
         },
     )
-class Item(BaseModel):
-    name: str
-    description: str | None = None
-    price: float
-    tax: float | None = None
 
 
-# @app.post("/items/")
-# async def create_item(item: Item):
-#    dictlist= item.model_dump()
-#    return str(dictlist)
-
-# @app.get("/items/")
-# async def read_items(q: Annotated[str, Query(min_length=3)] = "fixedquery") :
-#     results = {"items": [{"item_id": "Foo"}, {"item_id": "Bar"}],'q': '123'}
-#     if q:
-#         results.update({"q": q})
-#     return results
-
-@app.get("/items/")
-async def read_items(q: Annotated[list[str] | None, Query()] = None):
-    query_items = {"q": q}
-    return query_items
 
 
-class Items(BaseModel):
+class Customer(BaseModel):
     name: str
     description: str | None = None
     price: float
@@ -85,6 +65,25 @@ class Items(BaseModel):
     tags: set[str] = set()
 
 
-@app.post("/items/", status_code=status.HTTP_201_CREATED)
-async def create_item(item: Items) -> Items:
+@app.post("/customers/", status_code=status.HTTP_201_CREATED)
+async def create_customer(customer: Customer) -> Customer:
+    return customer
+
+class Item(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+    tax: float | None = None
+    cost:float
+
+class ItemPublic(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+
+
+
+@app.post("/items/",response_model=ItemPublic)
+async def get_public_item(item:Item):
     return item
+

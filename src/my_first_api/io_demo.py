@@ -1,5 +1,5 @@
-import math
 import json
+import math
 
 print("=" * 60)
 print("【一、格式化输出：f-string（推荐）】")
@@ -27,7 +27,7 @@ print(repr(s))
 print("\n" + "=" * 60)
 print("【二、str.format() 格式化】")
 print("=" * 60)
-print("{0} 的圆周率大概是 {1:.4f}".format("圆周率", math.pi))
+print("{} 的圆周率大概是 {:.4f}".format("圆周率", math.pi))
 print("{name} 今年 {age} 岁".format(name="小红", age=18))
 
 # 对齐方法 rjust / ljust / center / zfill
