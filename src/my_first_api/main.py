@@ -134,3 +134,8 @@ async def get_config():
         "debug": config.debug,
         "database_url": config.database_url,
     }
+
+def run() -> None:
+    import uvicorn
+
+    uvicorn.run("my_first_api.main:app", host="127.0.0.1", port=8000, reload=True)
