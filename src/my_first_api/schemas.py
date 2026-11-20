@@ -33,3 +33,13 @@ class ItemPublic(BaseModel):
     price: float
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class Customer(BaseModel):
+    """POST /customers/ 的请求体（当前只用于练请求体校验，尚未落库）。"""
+
+    name: str
+    description: str | None = None
+    price: float
+    tax: float | None = None
+    tags: set[str] = set()
