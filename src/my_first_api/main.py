@@ -2,19 +2,31 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 from starlette import status
+
 from .config import get_settings
+from .db import Base, engine, get_db
+from .models import Item
+from .schemas import ItemCreate, ItemPublic
+
 print(f"当前工作目录: {os.getcwd()}")
+
+
 @asynccontextmanager
 async def lifespan(app):
     print("应用跑起来了...")
+    Base.metadata.create_all(bind=engine)
     yield
     print("应用要关闭了...")
+
+
 app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.add_middleware(
@@ -23,7 +35,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
-
 
 
 @app.exception_handler(RuntimeError)
@@ -88,39 +99,32 @@ async def create_customer(customer: Customer) -> Customer:
     return customer
 
 
-class Item(BaseModel):
-    name: str
-    description: str | None = None
-    price: float
-    tax: float | None = None
-    cost: float
-
-
-class ItemPublic(BaseModel):
-    name: str
-    description: str | None = None
-    price: float
-
-
-@app.post("/items/", response_model=ItemPublic)
-async def get_public_item(item: Item):
-    return item
-
-
-# 假的存储层：先用字典模拟数据库，C 阶段会换成 SQLAlchemy
-FAKE_ITEMS: dict[int, Item] = {
-    1: Item(
-        name="笔记本", description="13 寸轻薄本", price=5999.0, tax=0.13, cost=4800.0
-    ),
-    2: Item(name="鼠标", description="无线静音", price=129.0, tax=0.13, cost=60.0),
-}
+@app.get("/items/", response_model=list[ItemPublic])
+async def read_items(db: Session = Depends(get_db)):
+    return db.scalars(select(Item)).all()
 
 
 @app.get("/items/{item_id}", response_model=ItemPublic)
-async def get_item_id(item_id: int):
-    if item_id not in FAKE_ITEMS:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return FAKE_ITEMS[item_id]
+async def read_item(item_id: int, db: Session = Depends(get_db)):
+    db_item = db.get(Item, item_id)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail=f"Item {item_id} not found")
+    return db_item
+
+
+@app.post("/items/", response_model=ItemPublic, status_code=status.HTTP_201_CREATED)
+async def create_item(item: ItemCreate, db: Session = Depends(get_db)):
+    # 1. 用请求体造一个 ORM 对象（此时 id 还是空的）
+    db_item = Item(**item.model_dump())
+    # 2. 挂进会话
+    db.add(db_item)
+    # 3. 提交事务，真正写库
+    db.commit()
+    # 4. 回读，拿到数据库生成的自增 id
+    db.refresh(db_item)
+    # 5. 直接返回 ORM 对象，交给 response_model 裁剪
+    return db_item
+
 
 @app.get("/config")
 async def get_config():
