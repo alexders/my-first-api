@@ -4,8 +4,8 @@
 数据库实体在 models.py，连接与会话在 db.py。
 """
 
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict
-
 
 class ItemCreate(BaseModel):
     """POST /items/ 的请求体。
@@ -43,3 +43,35 @@ class Customer(BaseModel):
     price: float
     tax: float | None = None
     tags: set[str] = set()
+
+
+class ConversationCreate(BaseModel):
+    """POST /conversations/ 的请求体。"""
+
+    title: str | None = None
+
+
+class ConversationPublic(BaseModel):
+    """对外返回的 Conversation。"""
+
+    id: int
+    title: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class MessagePublic(BaseModel):
+    """对外返回的 Message。"""
+
+    id: int
+    conversation_id: int
+    role: str
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ConversationDetail(ConversationPublic):
+    """对外返回的 Conversation 详情，包含消息列表。"""
+
+    messages: list[MessagePublic] = []

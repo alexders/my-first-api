@@ -9,6 +9,8 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY README.md ./
 COPY src ./src
 COPY static ./static
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN uv sync --frozen --no-dev
 
-CMD ["uv", "run", "--no-sync", "uvicorn", "my_first_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uv run --no-sync alembic upgrade head && uv run --no-sync uvicorn my_first_api.main:app --host 0.0.0.0 --port 8000"]
