@@ -19,7 +19,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .db import Base, engine
 from .routers import chat, customers, items, system
 
 print(f"当前工作目录: {os.getcwd()}")
@@ -28,7 +27,6 @@ print(f"当前工作目录: {os.getcwd()}")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("应用跑起来了...")
-    Base.metadata.create_all(bind=engine)
     yield
     print("应用要关闭了...")
 
