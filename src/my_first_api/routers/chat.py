@@ -14,16 +14,23 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @router.get("/stream")
-async def chat_stream():
-    """以 SSE 形式逐块推送文本，前端用 EventSource 消费。"""
+async def chat_stream(conversation_id: int, message: str, db: Session = Depends(get_db)):
+    """流式输出模型的回答，同时把这一轮的问答存进数据库。"""
+    # 先查出这个会话是否存在
+    conversation = service.get_conversation_detail(db, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    # 下面返回一个 StreamingResponse，里面的内容是一个异步生成器
     return StreamingResponse(
-        service.event_stream(),
+        service.event_stream(conversation_id, message),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 Nginx 的缓冲
+        }
     )
+
 @router.post("/conversations", response_model=ConversationPublic,status_code=status.HTTP_201_CREATED,)
 def create_conversation(payload:ConversationCreate,db:Session =Depends(get_db)) :
     """创建一个新的对话记录"""

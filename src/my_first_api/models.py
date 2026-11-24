@@ -29,7 +29,7 @@ class Conversation(Base):
         back_populates="conversation", cascade="all, delete-orphan",order_by="Message.id"
     )
 
-    class Message(Base):
+class Message(Base):
         __tablename__ = "messages"
 
         id: Mapped[int] = mapped_column(primary_key=True)

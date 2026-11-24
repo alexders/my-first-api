@@ -9,7 +9,8 @@ from ..models import Conversation
 from ..schemas import ConversationCreate
 import asyncio
 from collections.abc import AsyncGenerator
-
+from ..db import SessionLocal
+from ..models import Message
 
 async def fake_llm_stream() -> AsyncGenerator[str, None]:
     """模拟模型一块一块吐字（每个块停留 1 秒）。"""
@@ -17,12 +18,31 @@ async def fake_llm_stream() -> AsyncGenerator[str, None]:
         await asyncio.sleep(1)
         yield piece
 
+def save_message(
+    db: Session, conversation_id: int, role: str, content: str
+) -> Message:
+    """存一条消息。role 只能是 user / assistant。"""
+    message = Message(conversation_id=conversation_id, role=role, content=content)
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return message
 
-async def event_stream() -> AsyncGenerator[str, None]:
-    """把文本块包装成 SSE 格式，并在结束时补一个 done 事件。"""
-    async for piece in fake_llm_stream():
-        yield f"data: {piece}\n\n"
-    yield "event: done\ndata: [DONE]\n\n"
+async def event_stream(conversation_id: int, prompt: str) -> AsyncGenerator[str, None]:
+    """流式输出，同时把这一轮的问答存进数据库。"""
+    # 先存用户的提问
+    db=SessionLocal()
+    try:
+        save_message(db, conversation_id, "user", prompt)
+
+        pieces:list[str] = []
+        async for piece in fake_llm_stream():
+            pieces.append(piece)
+            yield f"data: {piece}\n\n"
+        save_message(db, conversation_id, "assistant", "".join(pieces))
+        yield "event: done\ndata: [DONE]\n\n"
+    finally:
+        db.close()
 
 
 def create_conversation(db:Session,payload:ConversationCreate) -> Conversation:
