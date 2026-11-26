@@ -21,7 +21,7 @@ def test_read_item(client: TestClient):
     created = client.post(
         "/items/add_item", json={"name": "键盘", "price": 99.0, "cost": 60.0}
     ).json()
-    r = client.get("/items/1")
+    r = client.get(f"/items/{created['id']}")
     assert r.status_code == 200
     data = r.json()
     assert data["name"] == "键盘"

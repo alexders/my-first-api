@@ -38,3 +38,4 @@ url = "https://mirrors.cloud.tencent.com/pypi/simple"
 default = true
 [tool.ruff.lint]
 ignore = ["B008"]
+exclude = ["migrations/versions"]
