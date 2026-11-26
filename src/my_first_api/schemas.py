@@ -5,7 +5,9 @@
 """
 
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
+
 
 class ItemCreate(BaseModel):
     """POST /items/ 的请求体。
@@ -60,6 +62,7 @@ class ConversationPublic(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class MessagePublic(BaseModel):
     """对外返回的 Message。"""
 
@@ -70,6 +73,7 @@ class MessagePublic(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class ConversationDetail(ConversationPublic):
     """对外返回的 Conversation 详情，包含消息列表。"""

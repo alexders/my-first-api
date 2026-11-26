@@ -11,7 +11,9 @@
 这里保留：app 创建、路由挂载、中间件、全局异常处理、lifespan、启动入口。
 """
 
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -19,19 +21,39 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .config import get_settings
+from .logging_config import setup_logging
 from .routers import chat, customers, items, system
 
-print(f"当前工作目录: {os.getcwd()}")
+logger = logging.getLogger(__name__)
+setup_logging(get_settings().log_level)
+logger.info(f"当前工作目录: {os.getcwd()}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("应用跑起来了...")
+    logger.info("应用跑起来了...")
     yield
-    print("应用要关闭了...")
+    logger.info("应用要关闭了...")
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    cost_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "%s %s -> %s (%.1fms)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        cost_ms,
+    )
+    return response
+
 
 app.include_router(items.router)
 app.include_router(chat.router)

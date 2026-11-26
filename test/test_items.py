@@ -34,10 +34,12 @@ def test_read_item_not_found(client: TestClient):
     data = r.json()
     assert data["detail"] == "Item 999 not found"
 
+
 def test_create_missing_field(client: TestClient):
     payload = {"name": "鼠标", "price": 50.0}
     r = client.post("/items/add_item", json=payload)
     assert r.status_code == 422
+
 
 def test_list_after_create(client: TestClient):
     client.post("/items/add_item", json={"name": "A", "price": 1.0, "cost": 0.5})

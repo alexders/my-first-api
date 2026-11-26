@@ -1,9 +1,11 @@
-from sqlalchemy.orm import Mapped, mapped_column,relationship
+from datetime import datetime
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
 
-from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
 
 class Item(Base):
     __tablename__ = "items"
@@ -26,20 +28,24 @@ class Conversation(Base):
     )
 
     messages: Mapped[list["Message"]] = relationship(
-        back_populates="conversation", cascade="all, delete-orphan",order_by="Message.id"
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="Message.id",
     )
 
+
 class Message(Base):
-        __tablename__ = "messages"
+    __tablename__ = "messages"
 
-        id: Mapped[int] = mapped_column(primary_key=True)
-        conversation_id: Mapped[int] = mapped_column(
-            ForeignKey("conversations.id", ondelete="CASCADE"), index=True
-        )
-        role: Mapped[str] = mapped_column(String(20))
-        content: Mapped[str] = mapped_column(Text)
-        created_at: Mapped[datetime] = mapped_column(
-            DateTime(timezone=True), server_default=func.now()
-        )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
-        conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+    conversation: Mapped["Conversation"] = relationship(back_populates="messages")
