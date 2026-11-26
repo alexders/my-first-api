@@ -3,8 +3,8 @@
 import logging.config
 
 
-def setup_logging(level: str = "INFO") -> None:
-    """配置根 logger。在应用启动最早期调用一次。"""
+def setup_logging(level: str = "INFO", sql_level: str = "WARNING") -> None:
+    """配置根 logger 和 SQLAlchemy 的日志级别。在应用启动最早期调用一次。"""
     logging.config.dictConfig(
         {
             "version": 1,
@@ -19,6 +19,12 @@ def setup_logging(level: str = "INFO") -> None:
                 "console": {
                     "class": "logging.StreamHandler",
                     "formatter": "default",
+                }
+            },
+            "loggers": {
+                "sqlalchemy.engine": {
+                    "level": sql_level,
+                    "propagate": True,
                 }
             },
             "root": {"handlers": ["console"], "level": level},

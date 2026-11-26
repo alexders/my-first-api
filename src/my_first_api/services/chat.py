@@ -3,22 +3,64 @@
 以后接真模型时，只改这一层，路由层不用动。
 """
 
-import asyncio
+import logging
 from collections.abc import AsyncGenerator
 
+from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from ..config import get_settings
 from ..db import SessionLocal
 from ..models import Conversation, Message
 from ..schemas import ConversationCreate
 
+logger = logging.getLogger(__name__)
+settings = get_settings()
+client = AsyncOpenAI(
+    api_key=settings.llm_api_key, base_url=settings.llm_base_url, timeout=60
+)
+SYSTEM_PROMPT = "你是一个简洁的中文助手，回答控制在 100 字以内。"
 
-async def fake_llm_stream() -> AsyncGenerator[str, None]:
-    """模拟模型一块一块吐字（每个块停留 1 秒）。"""
-    for piece in ["今天", "天气", "不错", "，", "适合", "出门"]:
-        await asyncio.sleep(1)
-        yield piece
+
+def load_history(db: Session, conversation_id: int, limit: int = 20) -> list[dict]:
+    """取最近 limit 条消息，按时间正序，转成 API 需要的格式。"""
+    stmt = (
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.id.desc())
+        .limit(limit)
+    )
+    rows = list(db.scalars(stmt).all())
+    rows.reverse()
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *({"role": m.role, "content": m.content} for m in rows),
+    ]
+
+
+async def llm_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
+    """调用模型，逐块吐出增量文本。"""
+    stream = await client.chat.completions.create(
+        model=settings.llm_model,
+        messages=messages,
+        temperature=0.7,
+        max_tokens=800,
+        stream=True,
+    )
+    async for chunk in stream:
+        if not chunk.choices:
+            continue
+        piece = chunk.choices[0].delta.content
+        if piece:
+            yield piece
+
+
+# async def fake_llm_stream() -> AsyncGenerator[str, None]:
+#     """模拟模型一块一块吐字（每个块停留 1 秒）。"""
+#     for piece in ["今天", "天气", "不错", "，", "适合", "出门"]:
+#         await asyncio.sleep(1)
+#         yield piece
 
 
 def save_message(db: Session, conversation_id: int, role: str, content: str) -> Message:
@@ -36,12 +78,20 @@ async def event_stream(conversation_id: int, prompt: str) -> AsyncGenerator[str,
     db = SessionLocal()
     try:
         save_message(db, conversation_id, "user", prompt)
-
+        history = load_history(db, conversation_id)
         pieces: list[str] = []
-        async for piece in fake_llm_stream():
-            pieces.append(piece)
-            yield f"data: {piece}\n\n"
-        save_message(db, conversation_id, "assistant", "".join(pieces))
+        try:
+            async for piece in llm_stream(history):
+                pieces.append(piece)
+                # 模型回答里一旦有换行（列表、分段），SSE 会被拆成多个事件，前端拼接就乱了
+                yield f"data: {piece.replace(chr(10), ' ')}\n\n"
+        except Exception:
+            logger.exception("调用模型失败")
+            yield "event: error\ndata: 模型调用失败\n\n"
+            return
+        reply = "".join(pieces)
+        save_message(db, conversation_id, "assistant", reply)
+        logger.info("会话 %s 完成一轮问答，%d 字", conversation_id, len(reply))
         yield "event: done\ndata: [DONE]\n\n"
     finally:
         db.close()

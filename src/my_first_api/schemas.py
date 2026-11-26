@@ -4,9 +4,10 @@
 数据库实体在 models.py，连接与会话在 db.py。
 """
 
+from typing import Literal
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ItemCreate(BaseModel):
@@ -79,3 +80,23 @@ class ConversationDetail(ConversationPublic):
     """对外返回的 Conversation 详情，包含消息列表。"""
 
     messages: list[MessagePublic] = []
+
+
+class ExpenseItem(BaseModel):
+    """从一句自然语言里抽取出的一笔支出。"""
+
+    amount: float
+    category: Literal["餐饮", "交通", "购物", "其他"]
+    note: str | None = None
+
+
+class ExpenseExtraction(BaseModel):
+    """一次抽取的结果。json_object 模式要求顶层是对象，所以用 items 包裹。"""
+
+    items: list[ExpenseItem] = []
+
+
+class ExtractRequest(BaseModel):
+    """POST /ai/extract 的请求体。"""
+
+    text: str = Field(min_length=1, max_length=500)

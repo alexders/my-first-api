@@ -23,10 +23,11 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .logging_config import setup_logging
-from .routers import chat, customers, items, system
+from .routers import chat, customers, items, system, ai
 
 logger = logging.getLogger(__name__)
-setup_logging(get_settings().log_level)
+settings = get_settings()
+setup_logging(settings.log_level, "INFO" if settings.debug else "WARNING")
 logger.info(f"当前工作目录: {os.getcwd()}")
 
 
@@ -59,6 +60,7 @@ app.include_router(items.router)
 app.include_router(chat.router)
 app.include_router(customers.router)
 app.include_router(system.router)
+app.include_router(ai.router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

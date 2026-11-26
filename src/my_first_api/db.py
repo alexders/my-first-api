@@ -11,7 +11,7 @@ if settings.database_url.startswith("sqlite"):
     connect_arg = {"check_same_thread": False}
 engine = create_engine(
     settings.database_url,
-    echo=settings.debug,
+    echo=False,
     future=True,
     connect_args=connect_arg,
     pool_pre_ping=True,  # 借出连接前先 ping 一下，断了就自动换新的
