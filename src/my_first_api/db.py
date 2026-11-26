@@ -14,6 +14,7 @@ engine = create_engine(
     echo=True,
     future=True,
     connect_args=connect_arg,
+    pool_pre_ping=True,# 借出连接前先 ping 一下，断了就自动换新的
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
