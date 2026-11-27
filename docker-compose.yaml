@@ -17,6 +17,7 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/postgres
+      LLM_API_KEY: ${LLM_API_KEY}
     ports:
       - "8000:8000"
     depends_on:
