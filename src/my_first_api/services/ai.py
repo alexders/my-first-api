@@ -7,16 +7,13 @@ from openai import AsyncOpenAI
 from pydantic import ValidationError
 
 from ..config import get_settings
+from ..llm import get_llm_client
 from ..schemas import ExpenseExtraction
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
-client = AsyncOpenAI(
-    api_key=settings.llm_api_key,
-    base_url=settings.llm_base_url,
-    timeout=30,
-)
+
 _SCHEMA = json.dumps(ExpenseExtraction.model_json_schema(), ensure_ascii=False)
 SYSTEM_PROMPT = (
     "你是信息抽取器，从用户的话中提取所有支出。"
@@ -26,8 +23,11 @@ SYSTEM_PROMPT = (
 )
 
 
-async def extract_expenses(text: str, retries: int = 1) -> ExpenseExtraction:
+async def extract_expenses(
+    text: str, client: AsyncOpenAI | None = None, retries: int = 1
+) -> ExpenseExtraction:
     """把一句话解析成结构化支出列表，校验失败时自动重试。"""
+    client = client or get_llm_client()
     last_error: Exception | None = None
     for attempt in range(retries + 1):
         resp = await client.chat.completions.create(

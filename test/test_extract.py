@@ -1,17 +1,37 @@
-from my_first_api.schemas import ExpenseExtraction, ExpenseItem
+"""AI 抽取接口的契约测试：用假客户端替换真模型，不花 token、不依赖网络。"""
+
+from types import SimpleNamespace
+
+import pytest
+
+from my_first_api.llm import get_llm_client
+from my_first_api.main import app
 
 
-def test_extract_ok(client, monkeypatch):
-    """接口契约：把 service 的返回值正确转成 JSON。"""
+def make_stub_client(content: str) -> SimpleNamespace:
+    """构造一个假的 AsyncOpenAI：create() 直接返回固定内容。"""
 
-    async def fake_extract(text: str) -> ExpenseExtraction:
-        return ExpenseExtraction(
-            items=[ExpenseItem(amount=38.0, category="交通", note="打车")]
-        )
+    class _Completions:
+        async def create(self, **kwargs):
+            message = SimpleNamespace(content=content)
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
-    monkeypatch.setattr(
-        "my_first_api.routers.ai.ai_service.extract_expenses", fake_extract
-    )
+    return SimpleNamespace(chat=SimpleNamespace(completions=_Completions()))
+
+
+@pytest.fixture()
+def override_llm():
+    """替换 LLM 客户端依赖，测试结束后只清理这一项，不影响 get_db 的替换。"""
+
+    def _override(content: str) -> None:
+        app.dependency_overrides[get_llm_client] = lambda: make_stub_client(content)
+
+    yield _override
+    app.dependency_overrides.pop(get_llm_client, None)
+
+
+def test_extract_ok(client, override_llm):
+    override_llm('{"items": [{"amount": 38, "category": "交通", "note": "打车"}]}')
 
     r = client.post("/ai/extract", json={"text": "打车 38"})
     assert r.status_code == 200
@@ -31,15 +51,9 @@ def test_extract_too_long(client):
     assert r.status_code == 422
 
 
-def test_extract_model_failure(client, monkeypatch):
-    """模型输出不可解析时，翻译成 502 而不是 500。"""
-
-    async def broken_extract(text: str):
-        raise ValueError("模型输出无法解析")
-
-    monkeypatch.setattr(
-        "my_first_api.routers.ai.ai_service.extract_expenses", broken_extract
-    )
+def test_extract_invalid_output(client, override_llm):
+    """模型两次都不守约 → 校验失败 → 路由翻译成 502。"""
+    override_llm("这不是 JSON")
 
     r = client.post("/ai/extract", json={"text": "随便说点什么"})
     assert r.status_code == 502

@@ -12,14 +12,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..config import get_settings
 from ..db import SessionLocal
+from ..llm import get_llm_client
 from ..models import Conversation, Message
 from ..schemas import ConversationCreate
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-client = AsyncOpenAI(
-    api_key=settings.llm_api_key, base_url=settings.llm_base_url, timeout=60
-)
 SYSTEM_PROMPT = "你是一个简洁的中文助手，回答控制在 100 字以内。"
 
 
@@ -39,8 +37,11 @@ def load_history(db: Session, conversation_id: int, limit: int = 20) -> list[dic
     ]
 
 
-async def llm_stream(messages: list[dict]) -> AsyncGenerator[str, None]:
+async def llm_stream(
+    messages: list[dict], client: AsyncOpenAI | None = None
+) -> AsyncGenerator[str, None]:
     """调用模型，逐块吐出增量文本。"""
+    client = client or get_llm_client()
     stream = await client.chat.completions.create(
         model=settings.llm_model,
         messages=messages,
@@ -72,8 +73,11 @@ def save_message(db: Session, conversation_id: int, role: str, content: str) -> 
     return message
 
 
-async def event_stream(conversation_id: int, prompt: str) -> AsyncGenerator[str, None]:
+async def event_stream(
+    conversation_id: int, prompt: str, client: AsyncOpenAI | None = None
+) -> AsyncGenerator[str, None]:
     """流式输出，同时把这一轮的问答存进数据库。"""
+    client = client or get_llm_client()
     # 先存用户的提问
     db = SessionLocal()
     try:
@@ -81,7 +85,7 @@ async def event_stream(conversation_id: int, prompt: str) -> AsyncGenerator[str,
         history = load_history(db, conversation_id)
         pieces: list[str] = []
         try:
-            async for piece in llm_stream(history):
+            async for piece in llm_stream(history, client):
                 pieces.append(piece)
                 # 模型回答里一旦有换行（列表、分段），SSE 会被拆成多个事件，前端拼接就乱了
                 yield f"data: {piece.replace(chr(10), ' ')}\n\n"

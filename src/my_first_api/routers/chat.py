@@ -2,10 +2,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 from starlette import status
 
 from ..db import get_db
+from ..llm import get_llm_client
 from ..schemas import ConversationCreate, ConversationDetail, ConversationPublic
 from ..services import chat as service
 
@@ -14,7 +16,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 @router.get("/stream")
 async def chat_stream(
-    conversation_id: int, message: str, db: Session = Depends(get_db)
+    conversation_id: int,
+    message: str,
+    db: Session = Depends(get_db),
+    client: AsyncOpenAI = Depends(get_llm_client),
 ):
     """流式输出模型的回答，同时把这一轮的问答存进数据库。"""
     # 先查出这个会话是否存在
@@ -25,7 +30,7 @@ async def chat_stream(
         )
     # 下面返回一个 StreamingResponse，里面的内容是一个异步生成器
     return StreamingResponse(
-        service.event_stream(conversation_id, message),
+        service.event_stream(conversation_id, message, client),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
