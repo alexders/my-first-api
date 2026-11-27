@@ -15,6 +15,7 @@ from ..db import SessionLocal
 from ..llm import get_llm_client
 from ..models import Conversation, Message
 from ..schemas import ConversationCreate
+from .embedding import embed_text
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -57,16 +58,20 @@ async def llm_stream(
             yield piece
 
 
-# async def fake_llm_stream() -> AsyncGenerator[str, None]:
-#     """模拟模型一块一块吐字（每个块停留 1 秒）。"""
-#     for piece in ["今天", "天气", "不错", "，", "适合", "出门"]:
-#         await asyncio.sleep(1)
-#         yield piece
-
-
-def save_message(db: Session, conversation_id: int, role: str, content: str) -> Message:
+def save_message(
+    db: Session,
+    conversation_id: int,
+    role: str,
+    content: str,
+    embedding: list[float] | None = None,
+) -> Message:
     """存一条消息。role 只能是 user / assistant。"""
-    message = Message(conversation_id=conversation_id, role=role, content=content)
+    message = Message(
+        conversation_id=conversation_id,
+        role=role,
+        content=content,
+        embedding=embedding,
+    )
     db.add(message)
     db.commit()
     db.refresh(message)
@@ -78,11 +83,32 @@ async def event_stream(
 ) -> AsyncGenerator[str, None]:
     """流式输出，同时把这一轮的问答存进数据库。"""
     client = client or get_llm_client()
-    # 先存用户的提问
     db = SessionLocal()
     try:
-        save_message(db, conversation_id, "user", prompt)
-        history = load_history(db, conversation_id)
+        # ── 阶段 1：准备上下文（失败就无法开口）──
+        try:
+            prompt_vec = await embed_text(prompt, client)
+            # 先检索（此时当前消息还没入库，不会检索到自己）
+            hits = (
+                retrieve_similar(db, prompt_vec, conversation_id, 5)
+                if prompt_vec
+                else []
+            )
+            save_message(db, conversation_id, "user", prompt, prompt_vec)
+            history = load_history(db, conversation_id)
+        except Exception:
+            logger.exception("准备对话上下文失败")
+            db.rollback()
+            yield "event: error\ndata: 服务准备失败，请重试\n\n"
+            return
+
+        if hits:
+            context = "\n".join(f"- {m.content}" for m in hits)
+            history[0]["content"] += f"\n\n可能相关的历史记录：\n{context}"
+            logger.info("检索到 %d 条：%s", len(hits), [m.id for m in hits])
+            logger.info(f"拼接的prompt{history[0]['content']}")
+
+        # ── 阶段 2：流式生成 ──
         pieces: list[str] = []
         try:
             async for piece in llm_stream(history, client):
@@ -93,8 +119,18 @@ async def event_stream(
             logger.exception("调用模型失败")
             yield "event: error\ndata: 模型调用失败\n\n"
             return
+
+        # ── 阶段 3：落库 ──
         reply = "".join(pieces)
-        save_message(db, conversation_id, "assistant", reply)
+        try:
+            reply_vec = await embed_text(reply, client)
+            save_message(db, conversation_id, "assistant", reply, reply_vec)
+        except Exception:
+            logger.exception("保存回复失败")
+            db.rollback()
+            yield "event: error\ndata: 回答已生成但保存失败\n\n"
+            return
+
         logger.info("会话 %s 完成一轮问答，%d 字", conversation_id, len(reply))
         yield "event: done\ndata: [DONE]\n\n"
     finally:
@@ -124,3 +160,17 @@ def get_conversation_detail(db: Session, conversation_id: int) -> Conversation |
         .where(Conversation.id == conversation_id)
     )
     return db.scalars(stmt).first()
+
+
+def retrieve_similar(
+    db: Session, query_vec: list[float], conversation_id: int, k: int = 5
+) -> list[Message]:
+    """在当前会话里找和 query_vec 最相近的 k 条消息（Top-K）。"""
+    stmt = (
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .where(Message.embedding.is_not(None))
+        .order_by(Message.embedding.cosine_distance(query_vec))
+        .limit(k)
+    )
+    return list(db.scalars(stmt).all())
