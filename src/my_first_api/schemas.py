@@ -4,8 +4,8 @@
 数据库实体在 models.py，连接与会话在 db.py。
 """
 
-from typing import Literal
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 

@@ -1,6 +1,7 @@
 """验证结构化输出：让模型返回能被 Pydantic 解析的 JSON。"""
 
 import logging
+
 from openai import OpenAI
 
 from my_first_api.config import get_settings

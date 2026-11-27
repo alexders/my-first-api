@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .logging_config import setup_logging
-from .routers import chat, customers, items, system, ai
+from .routers import ai, chat, customers, items, system
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
