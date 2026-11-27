@@ -4,6 +4,7 @@
 """
 
 import logging
+import time
 from collections.abc import AsyncGenerator
 
 from openai import AsyncOpenAI
@@ -39,9 +40,11 @@ def load_history(db: Session, conversation_id: int, limit: int = 20) -> list[dic
 
 
 async def llm_stream(
-    messages: list[dict], client: AsyncOpenAI | None = None
+    messages: list[dict],
+    client: AsyncOpenAI | None = None,
+    usage_holder: dict | None = None,
 ) -> AsyncGenerator[str, None]:
-    """调用模型，逐块吐出增量文本。"""
+    """调用模型，逐块吐出增量文本。传入 usage_holder 可回填 token 用量"""
     client = client or get_llm_client()
     stream = await client.chat.completions.create(
         model=settings.llm_model,
@@ -49,8 +52,12 @@ async def llm_stream(
         temperature=0.7,
         max_tokens=800,
         stream=True,
+        stream_options={"include_usage": True},
     )
+    # 先取 usage，再判断 choices —— 顺序不能反
     async for chunk in stream:
+        if chunk.usage and usage_holder is not None:
+            usage_holder["usage"] = chunk.usage
         if not chunk.choices:
             continue
         piece = chunk.choices[0].delta.content
@@ -106,12 +113,17 @@ async def event_stream(
             context = "\n".join(f"- {m.content}" for m in hits)
             history[0]["content"] += f"\n\n可能相关的历史记录：\n{context}"
             logger.info("检索到 %d 条：%s", len(hits), [m.id for m in hits])
-            logger.info(f"拼接的prompt{history[0]['content']}")
+            # logger.info(f"拼接的prompt{history[0]['content']}")
 
         # ── 阶段 2：流式生成 ──
         pieces: list[str] = []
+        usage_holder: dict = {}
+        started = time.perf_counter()
+        first_token_at: float | None = None
         try:
-            async for piece in llm_stream(history, client):
+            async for piece in llm_stream(history, client, usage_holder):
+                if first_token_at is None:
+                    first_token_at = time.perf_counter()
                 pieces.append(piece)
                 # 模型回答里一旦有换行（列表、分段），SSE 会被拆成多个事件，前端拼接就乱了
                 yield f"data: {piece.replace(chr(10), ' ')}\n\n"
@@ -119,7 +131,19 @@ async def event_stream(
             logger.exception("调用模型失败")
             yield "event: error\ndata: 模型调用失败\n\n"
             return
+        total_ms = (time.perf_counter() - started) * 1000
+        ttft_ms = (first_token_at - started) * 1000 if first_token_at else None
 
+        usage = usage_holder.get("usage")
+        if usage:
+            logger.info(
+                "会话 %s 首字 %.0fms / 总耗时 %.0fms / 输入 %d / 输出 %d token",
+                conversation_id,
+                ttft_ms or 0,
+                total_ms,
+                usage.prompt_tokens,
+                usage.completion_tokens,
+            )
         # ── 阶段 3：落库 ──
         reply = "".join(pieces)
         try:
