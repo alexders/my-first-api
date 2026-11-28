@@ -49,3 +49,19 @@ class Message(Base):
     )
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+
+
+class RequestLog(Base):
+    __tablename__ = "request_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    prompt_token: Mapped[int]
+    completion_token: Mapped[int]
+    ttft_ms: Mapped[int | None]
+    total_ms: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

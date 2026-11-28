@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..config import get_settings
 from ..db import SessionLocal
 from ..llm import get_llm_client
-from ..models import Conversation, Message
+from ..models import Conversation, Message, RequestLog
 from ..schemas import ConversationCreate
 from .embedding import embed_text
 
@@ -102,7 +102,7 @@ async def event_stream(
                 else []
             )
             save_message(db, conversation_id, "user", prompt, prompt_vec)
-            history = load_history(db, conversation_id)
+            history = load_history(db, conversation_id, 10)
         except Exception:
             logger.exception("准备对话上下文失败")
             db.rollback()
@@ -154,6 +154,21 @@ async def event_stream(
             db.rollback()
             yield "event: error\ndata: 回答已生成但保存失败\n\n"
             return
+        # ── 阶段 4：记录指标 ──
+        try:
+            db.add(
+                RequestLog(
+                    conversation_id=conversation_id,
+                    prompt_token=usage.prompt_tokens if usage else 0,
+                    completion_token=usage.completion_tokens if usage else 0,
+                    ttft_ms=round(ttft_ms) if ttft_ms is not None else None,
+                    total_ms=round(total_ms),
+                )
+            )
+            db.commit()
+        except Exception:
+            logger.exception("记录请求指标失败")
+            db.rollback()
 
         logger.info("会话 %s 完成一轮问答，%d 字", conversation_id, len(reply))
         yield "event: done\ndata: [DONE]\n\n"
